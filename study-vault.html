@@ -304,6 +304,10 @@ button.chip{cursor:pointer;font:inherit;font-size:13px}
 .pdf-notes{white-space:pre-wrap;border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:13px}
 .pdf-prog{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:30;display:flex;gap:12px;align-items:center;background:var(--surface);color:var(--ink);border:1px solid var(--line-2);border-radius:var(--r);padding:10px 14px;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.14);max-width:calc(100vw - 32px)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:var(--r);font-size:14px;max-width:min(560px,calc(100vw - 32px));z-index:20;box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.toast-btn{margin-left:10px;border:0;background:transparent;color:var(--hl-bg);font:700 14px var(--f-ui);cursor:pointer;text-decoration:underline}
+.selbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-radius:var(--r);background:var(--bad-soft);font-size:14px}
+td.pick{width:1%}
+td.pick input{width:17px;height:17px;accent-color:var(--bad);cursor:pointer}
 .empty{color:var(--ink-3);font-size:14px;padding:12px 0}
 
 /* ---------- Calm paper & ink ---------- */
@@ -416,7 +420,12 @@ const baseName = s => safeName(String(s || 'file').replace(/^\d{1,3}[._\- ]+/, '
 function loadDefaults() { try { return JSON.parse(localStorage.getItem('vault.defaults') || 'null') || { course: '', kind: '', lecture: '' }; } catch { return { course: '', kind: '', lecture: '' }; } }
 function saveDefaults() { try { localStorage.setItem('vault.defaults', JSON.stringify(S.ui.defaults)); } catch {} }
 let toastTimer = null;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 5000); }
+function toast(msg, action) {
+  const t = $('#toast'); S.toastAction = action || null;
+  t.textContent = msg;
+  if (action) { const b = document.createElement('button'); b.className = 'toast-btn'; b.dataset.act = 'toastAction'; b.textContent = action.label; t.append(' ', b); }
+  t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; S.toastAction = null; }, action ? 10000 : 5000);
+}
 const loaded = {};
 function loadScript(src) {
   return loaded[src] ||= new Promise((res, rej) => {
@@ -880,7 +889,13 @@ function markFilterBar(id, list) {
   const n = { all: list.length, more: list.filter(needsMore).length, complete: list.filter(isDone).length, none: list.filter(isUnmarked).length };
   const pdfBtn = S.downloads && n[f] ? `<button class="btn sm" style="margin-left:auto" data-act="pdfCourse" data-course="${esc(id)}" ${S.pdfBusy ? 'disabled' : ''}>Download ${f === 'all' ? 'all' : 'these'} as PDF</button>` : '';
   const confirm = S.ui.confirm === 'pdf:' + id ? `<div class="confirm" style="background:var(--pen-soft)"><span>That's ${n[f]} documents, likely a few hundred pages. Making it can take several minutes, and the page has to stay open. Picking a filter above makes it smaller.</span><button class="btn sm primary" data-act="pdfCourse" data-course="${esc(id)}">Make the PDF</button><button class="btn sm ghost" data-act="confirmCancel">Cancel</button></div>` : '';
-  return `<div class="sec" style="gap:8px"><div class="row"><span class="dim small">Show</span><div class="chips">${[['all', 'All'], ['more', 'Need more understanding'], ['complete', 'Complete'], ['none', 'Not marked yet']].map(([k, l]) => `<button class="chip ${f === k ? 'on' : ''}" data-act="markFilter" data-course="${esc(id)}" data-f="${k}" aria-pressed="${f === k}">${l} <span class="mono">${n[k]}</span></button>`).join('')}</div>${pdfBtn}</div>${confirm}</div>`;
+  const sel = S.ui.select?.course === id ? S.ui.select : null;
+  const selBtn = S.db ? `<button class="btn sm ${sel ? 'primary' : ''}" ${pdfBtn ? '' : 'style="margin-left:auto"'} data-act="toggleSelect" data-course="${esc(id)}">${sel ? 'Done selecting' : 'Select to delete'}</button>` : '';
+  const shown = coursePdfIds(id), picked = sel ? [...sel.ids].filter(x => S.concepts.has(x)) : [];
+  const selBar = !sel ? '' : S.ui.confirm === 'delmany:' + id && picked.length
+    ? `<div class="selbar"><span>Delete ${picked.length} document${picked.length === 1 ? '' : 's'} with ${picked.length === 1 ? 'its' : 'their'} check questions, review history and marks? You can undo for 10 seconds right after; after that it's permanent.</span><button class="btn sm danger" data-act="deleteSelected" data-course="${esc(id)}">Delete ${picked.length}</button><button class="btn sm ghost" data-act="confirmCancel">Cancel</button></div>`
+    : `<div class="selbar"><span><strong>${picked.length}</strong> selected. Tick the documents you don't need.</span><button class="btn sm" data-act="selectAll" data-course="${esc(id)}">${picked.length === shown.length && shown.length ? 'Clear all' : `Select all ${shown.length} shown`}</button><button class="btn sm danger" data-act="askDeleteSelected" data-course="${esc(id)}" ${picked.length ? '' : 'disabled'}>Delete selected</button></div>`;
+  return `<div class="sec" style="gap:8px"><div class="row"><span class="dim small">Show</span><div class="chips">${[['all', 'All'], ['more', 'Need more understanding'], ['complete', 'Complete'], ['none', 'Not marked yet']].map(([k, l]) => `<button class="chip ${f === k ? 'on' : ''}" data-act="markFilter" data-course="${esc(id)}" data-f="${k}" aria-pressed="${f === k}">${l} <span class="mono">${n[k]}</span></button>`).join('')}</div>${pdfBtn}${selBtn}</div>${confirm}${selBar}</div>`;
 }
 function lectureSection(l, courseId, keep) {
   const concepts = keep ? l.concepts.filter(keep) : l.concepts;
@@ -895,8 +910,8 @@ function lectureSection(l, courseId, keep) {
   return `<section class="lecture">
     ${head}
     ${!keep && l.beforeReading.length ? `<details class="plain"><summary>Before reading: guess first</summary><ol>${l.beforeReading.map(b => `<li>${esc(b.q)} ${S.concepts.has(b.concept) ? `→ <a href="#" data-act="go" data-view="concept" data-id="${esc(b.concept)}">${esc(S.concepts.get(b.concept).title)}</a>` : ''}</li>`).join('')}</ol></details>` : ''}
-    ${concepts.length ? `<div class="tablewrap"><table><thead><tr><th>No.</th><th>Concept</th><th>In one line</th><th>Cards</th><th>Status</th><th>Marked</th></tr></thead><tbody>
-      ${concepts.map(c => { const ms = mastery(c); return `<tr><td class="num">${numLabel(c)}</td><td><a href="#" data-act="go" data-view="concept" data-id="${esc(c.id)}"><strong>${esc(c.title)}</strong></a>${c.koreanTerm ? ` <span class="kterm">${esc(c.koreanTerm)}</span>` : ''}${c.origin === 'example' ? ' <span class="pill hl">sample</span>' : ''}</td>
+    ${concepts.length ? `<div class="tablewrap"><table><thead><tr>${S.ui.select?.course === courseId ? '<th></th>' : ''}<th>No.</th><th>Concept</th><th>In one line</th><th>Cards</th><th>Status</th><th>Marked</th></tr></thead><tbody>
+      ${concepts.map(c => { const ms = mastery(c), sel = S.ui.select?.course === courseId ? S.ui.select : null; return `<tr>${sel ? `<td class="pick"><input type="checkbox" data-change="pickDoc" value="${esc(c.id)}" ${sel.ids.has(c.id) ? 'checked' : ''} aria-label="Select ${esc(c.title)}"></td>` : ''}<td class="num">${numLabel(c)}</td><td><a href="#" data-act="go" data-view="concept" data-id="${esc(c.id)}"><strong>${esc(c.title)}</strong></a>${c.koreanTerm ? ` <span class="kterm">${esc(c.koreanTerm)}</span>` : ''}${c.origin === 'example' ? ' <span class="pill hl">sample</span>' : ''}</td>
         <td class="small">${esc(c.oneLine || '')}${c.emphasized ? ' <span class="pill hl">emphasized</span>' : ''}</td><td class="num">${(c.cards || []).length}</td><td><span class="pill ${ms}">${STATUS_LABEL[ms]}</span></td><td>${markPills(c)}</td></tr>`; }).join('')}
     </tbody></table></div>` : ''}
     ${late.length ? `<div class="dim small">${late.map(esc).join(' ')}</div>` : ''}
@@ -966,7 +981,9 @@ function viewConcept(id) {
       <button class="mk ${st === 'complete' ? 'on-ok' : ''}" data-act="markDoc" data-id="${esc(id)}" data-v="complete" aria-pressed="${st === 'complete'}">Complete</button>
       <button class="mk ${st === 'more' ? 'on-warn' : ''}" data-act="markDoc" data-id="${esc(id)}" data-v="more" aria-pressed="${st === 'more'}">Need more understanding</button>
       <span class="dim small">${parts ? `${parts} part${parts === 1 ? '' : 's'} below marked to revisit.` : 'Each section heading below has its own buttons too.'}</span>
-      ${S.downloads ? `<button class="btn sm" style="margin-left:auto" data-act="pdfConcept" data-id="${esc(id)}" ${S.pdfBusy ? 'disabled' : ''}>Download PDF</button>` : ''}</div>`; })()}</div>
+      ${S.downloads ? `<button class="btn sm" style="margin-left:auto" data-act="pdfConcept" data-id="${esc(id)}" ${S.pdfBusy ? 'disabled' : ''}>Download PDF</button>` : ''}
+      ${S.db ? `<button class="btn sm ghost danger" ${S.downloads ? '' : 'style="margin-left:auto"'} data-act="askDelConcept" data-id="${esc(id)}">Delete</button>` : ''}</div>
+      ${S.ui.confirm === 'concept:' + id ? `<div class="confirm"><span>Delete this document with its check questions, review history and marks? You can undo for 10 seconds right after.</span><button class="btn sm danger" data-act="delConcept" data-id="${esc(id)}">Delete</button><button class="btn sm ghost" data-act="confirmCancel">Cancel</button></div>` : ''}`; })()}</div>
   ${c.origin === 'example' ? `<div class="sample-note">Sample document, written to show the format. It isn't from your course material. It merges into your own version once your uploads cover this topic, or you can delete it.</div>` : ''}
   <div class="doc-grid">
     <article class="doc">
@@ -990,7 +1007,6 @@ function viewConcept(id) {
         ${cards.length ? `<button class="btn sm" data-act="quizConcept" data-id="${esc(id)}" ${S.sample ? '' : 'disabled'}>Quiz me on these</button>` : ''}
         <button class="btn sm" data-act="toggleReviewed" data-id="${esc(id)}">${c.status === 'reviewed' ? 'Unmark reviewed' : 'Mark as reviewed by me'}</button>
         <button class="btn sm ghost danger" data-act="askDelConcept" data-id="${esc(id)}">Delete document</button>
-        ${confirmBox('concept:' + id, 'Delete this document and its review history?', 'delConcept', id)}
       </div>
     </aside>
   </div>`;
@@ -2015,6 +2031,40 @@ function coursePdfIds(courseId) {
   return conceptsOf(courseId).filter(c => !keep || keep(c)).map(c => c.id);
 }
 
+/* ---------- deleting documents ---------- */
+// Deletes documents with their review records and marks. A copy stays in memory so the
+// Undo button in the toast can put everything back within 10 seconds.
+async function deleteConcepts(ids) {
+  const strip = o => { const { id, ...rest } = o; return rest; };
+  const saved = [];
+  for (const id of ids) {
+    const c = S.concepts.get(id); if (!c) continue;
+    const reviews = (c.cards || []).map(k => cardKey(id, k.n)).filter(k => S.reviews.has(k)).map(k => [k, strip(S.reviews.get(k))]);
+    saved.push({ id, doc: strip(c), reviews, mark: markOf(id) ? strip(markOf(id)) : null });
+  }
+  let done = 0, failed = 0;
+  for (const it of saved) {
+    try {
+      for (const [k] of it.reviews) await S.db.doc('reviews/' + k).delete();
+      if (it.mark) await S.db.doc('marks/' + it.id).delete();
+      await S.db.doc('concepts/' + it.id).delete();
+      done++;
+    } catch { failed++; }
+  }
+  if (!done) { toast(saved.length === 1 ? 'The document couldn’t be deleted.' : 'The documents couldn’t be deleted.'); return; }
+  const restore = async () => {
+    try {
+      for (const it of saved) {
+        await S.db.doc('concepts/' + it.id).set(it.doc);
+        for (const [k, r] of it.reviews) await S.db.doc('reviews/' + k).set(r);
+        if (it.mark) await S.db.doc('marks/' + it.id).set(it.mark);
+      }
+      toast(`Restored ${saved.length} document${saved.length === 1 ? '' : 's'}.`);
+    } catch { toast('Undo failed for some documents.'); }
+  };
+  toast(`Deleted ${done} document${done === 1 ? '' : 's'}${failed ? ` · ${failed} couldn’t be deleted` : ''}.`, { label: 'Undo', fn: restore });
+}
+
 /* ---------- actions ---------- */
 const ACT = {
   go(d) { S.route = { view: d.view, id: d.id, course: d.course, section: d.section || null }; S.ui.editTitle = null; S.ui.editLecture = null; S.ui.menu = false; S.ui.confirm = null; if (d.view !== 'review' && S.session?.done) S.session = null; render(); },
@@ -2051,9 +2101,14 @@ const ACT = {
   },
   async delConcept(d) {
     const c = S.concepts.get(d.id); S.ui.confirm = null; if (!c) return;
-    try { for (const k of c.cards || []) await S.db.doc('reviews/' + cardKey(c.id, k.n)).delete(); if (markOf(c.id)) await S.db.doc('marks/' + c.id).delete().catch(() => {}); await S.db.doc('concepts/' + c.id).delete(); S.route = { view: 'course', course: c.course }; toast('Document deleted.'); } catch { toast('The document couldn’t be deleted.'); }
-    render();
+    S.route = { view: 'course', course: c.course }; render();
+    await deleteConcepts([c.id]);
   },
+  toggleSelect(d) { S.ui.select = S.ui.select?.course === d.course ? null : { course: d.course, ids: new Set() }; S.ui.confirm = null; render(); },
+  selectAll(d) { const sel = S.ui.select; if (!sel) return; const shown = coursePdfIds(d.course); sel.ids = [...sel.ids].filter(x => S.concepts.has(x)).length === shown.length ? new Set() : new Set(shown); render(); },
+  askDeleteSelected(d) { S.ui.confirm = 'delmany:' + d.course; render(); },
+  async deleteSelected() { const ids = [...(S.ui.select?.ids || [])].filter(x => S.concepts.has(x)); S.ui.confirm = null; S.ui.select = null; render(); await deleteConcepts(ids); },
+  toastAction() { const a = S.toastAction; S.toastAction = null; $('#toast').hidden = true; a?.fn(); },
   async toggleReviewed(d) { const c = S.concepts.get(d.id); if (c) { try { await S.db.doc('concepts/' + c.id).update({ status: c.status === 'reviewed' ? 'draft' : 'reviewed' }); } catch { toast('Couldn’t save.'); } } },
   addCourseOpen() { S.ui.addCourse = true; S.ui.courseDraft = { semester: currentSem() }; S.route = { view: 'home' }; S.ui.menu = false; render(); setTimeout(() => $('#acName')?.focus(), 0); },
   addCourseCancel() { S.ui.addCourse = false; render(); },
@@ -2159,6 +2214,7 @@ const CHANGE = {
   async myNotes(d, el) { try { await S.db.doc('concepts/' + d.id).update({ myNotes: el.value }); toast('Notes saved.'); } catch { toast('Couldn’t save your notes.'); } },
   prereqDraft(d, el) { const set = new Set(S.ui.prereqDraft); el.checked ? set.add(el.value) : set.delete(el.value); S.ui.prereqDraft = [...set]; },
   natureDraft(d, el) { S.ui.natureDraft = el.value; },
+  pickDoc(d, el) { const sel = S.ui.select; if (!sel) return; el.checked ? sel.ids.add(el.value) : sel.ids.delete(el.value); S.ui.confirm = null; render(); },
   restoreFile(d, el) { const f = el.files?.[0]; el.value = ''; if (f) readBackupFile(f); }
 };
 const INPUT = {

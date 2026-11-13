@@ -13,6 +13,7 @@ The writing rules come from a `CLAUDE.md` learning spec: explain before naming, 
 - **Marks:** flag a whole document or one section as *Complete* or *Need more understanding*, then filter by it or jump back to it.
 - **Rewrite:** bring older documents up to the current rules while keeping your notes, card numbers and review history. The previous version can be restored.
 - **Renaming:** rename lecture topics, document titles and courses.
+- **Deleting:** remove one document from its page, or tick several on a course page with **Select to delete**. Each document goes with its check questions, review history and marks, and **Undo** in the message at the bottom brings them back for 10 seconds.
 - **Export:** download any document, course or marked set as a PDF, or the whole vault as an Obsidian folder (`.zip`).
 - **Backup:** one `.json` file with everything, to restore in another browser or move between claude.ai and GitHub Pages.
 
