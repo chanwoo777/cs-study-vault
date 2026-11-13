@@ -96,7 +96,7 @@ h3{font-size:15px;font-weight:600;margin:0}
 .pill.pen{color:var(--pen);background:var(--pen-soft);border-color:transparent}
 .pill.hl{background:var(--hl-bg);border-color:transparent;color:var(--ink)}
 
-input[type=text],input[type=number],input[type=date],select,textarea{background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r);padding:6px 9px;font-size:14px;min-width:0}
+input[type=text],input[type=password],input[type=number],input[type=date],select,textarea{background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r);padding:6px 9px;font-size:14px;min-width:0}
 textarea{width:100%;resize:vertical;line-height:1.55}
 .field{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink-3)}
 .field input,.field select{color:var(--ink)}
@@ -661,9 +661,9 @@ function renderSide() {
     const inner = (s.courses || []).map(c => courseLink({ ...c, semester: s.id })).join('') || '<div class="dim small" style="padding:4px 10px">No courses</div>';
     return s.id === currentSem() ? `<div><div class="side-h"><span>${esc(s.id)} · current</span></div>${inner}</div>` : `<details><summary class="side-h"><span>${esc(s.id)}</span><span>+</span></summary>${inner}</details>`;
   }).join('');
-  const envLine = S.env === 'offline' ? 'Not connected. Open this page on claude.ai to save.' : S.env === 'loading' ? 'Connecting…' : S.sample ? 'Saved to this page · Claude ready' : 'Saved to this page · Claude unavailable here';
+  const envLine = S.env === 'local' ? `Saved in this browser · ${apiKey() ? 'Claude key set' : 'add a Claude key in Settings'}` : S.env === 'offline' ? 'Not connected. Open this page on claude.ai to save.' : S.env === 'loading' ? 'Connecting…' : S.sample ? 'Saved to this page · Claude ready' : 'Saved to this page · Claude unavailable here';
   return `<div class="brand"><span class="brand-name">CS Study Vault</span><span class="mono dim small">${esc(currentSem())}</span></div>
-  <nav class="nav">${nav('home', 'Home')}${nav('inbox', 'Inbox', waiting)}${nav('review', 'Review', due, true)}${nav('marks', 'My marks', markItems('more').length)}${nav('glossary', 'Glossary')}${nav('worklog', 'Worklog')}</nav>
+  <nav class="nav">${nav('home', 'Home')}${nav('inbox', 'Inbox', waiting)}${nav('review', 'Review', due, true)}${nav('marks', 'My marks', markItems('more').length)}${nav('glossary', 'Glossary')}${nav('worklog', 'Worklog')}${nav('settings', 'Settings')}</nav>
   <div class="sec" style="gap:14px">${sems}<a href="#" class="small" data-act="addCourseOpen">+ Add course</a></div>
   <div class="side-foot">
     ${semesters().length ? `<label>Current semester <select data-change="curSem">${semesters().map(s => `<option ${s.id === currentSem() ? 'selected' : ''}>${esc(s.id)}</option>`).join('')}</select></label>` : ''}
@@ -675,7 +675,7 @@ function renderSide() {
 /* ---------- views ---------- */
 function renderView() {
   const banner = S.env === 'offline' ? `<div class="banner">This page stores your vault on claude.ai. Open it there to upload notes, save documents and use Claude.</div>` : '';
-  if (S.env === 'loading' || (S.env === 'live' && !S.configLoaded)) return `<p class="empty">Loading your vault…</p>`;
+  if (S.env === 'loading' || (isLive() && !S.configLoaded)) return `<p class="empty">Loading your vault…</p>`;
   let body;
   switch (S.route.view) {
     case 'inbox': body = viewInbox(); break;
@@ -685,6 +685,7 @@ function renderView() {
     case 'marks': body = viewMarks(); break;
     case 'glossary': body = viewGlossary(); break;
     case 'worklog': body = viewWorklog(); break;
+    case 'settings': body = viewSettings(); break;
     default: body = viewHome();
   }
   return banner + body;
@@ -720,6 +721,7 @@ function viewHome() {
   const courseEdges = uniq(edges.map(e => e.join('>'))).map(e => e.split('>'));
   const bridges = [...S.concepts.values()].filter(c => c.type === 'bridge');
   return `<header class="page-head"><div class="eyebrow">${esc(dateLabel)}</div><h1>Today</h1></header>
+  ${S.env === 'local' ? `<div class="banner info">This vault is saved in this browser only. ${apiKey() ? '' : 'Add your Claude API key in <a href="#" data-act="go" data-view="settings">Settings</a> to arrange notes and grade answers. '}Download a backup from Settings now and then.</div>` : ''}
   <section class="today">
     <div class="today-item"><div class="big mono"><span class="${due ? 'hl' : ''}">${due}</span></div><div><p>check questions due for review</p><button class="btn primary" data-act="startReview" ${due ? '' : 'disabled'}>Start review</button></div></div>
     <div class="today-item"><div class="big mono">${waiting}</div><div><p>files waiting in the inbox</p><button class="btn" data-act="go" data-view="inbox">Open inbox</button></div></div>
@@ -750,8 +752,8 @@ function viewInbox() {
   const newOnes = waiting.filter(s => s.status === 'new');
   return `<header class="page-head"><div class="eyebrow">Inbox</div><h1>Add notes and slides</h1>
     <p class="lede">Drop in slides, textbook pages, problem sheets, photos of handwritten notes or your own code. Claude first plans which concept documents the file needs. You check the plan, then it writes them.</p></header>
-  ${!S.sample && S.env === 'live' ? `<div class="banner">Claude can't be reached from this view, so files can be stored but not arranged.</div>` : ''}
-  ${!S.assets && S.env === 'live' ? `<div class="banner">Uploading needs edit access to this page.</div>` : ''}
+  ${!S.sample && isLive() ? `<div class="banner">Claude can't be reached from this view, so files can be stored but not arranged.</div>` : ''}
+  ${!S.assets && isLive() ? `<div class="banner">Uploading needs edit access to this page.</div>` : ''}
   <section class="drop" data-drop>
     <div class="row"><strong>Drop files here</strong><span class="dim">or</span><button class="btn" data-act="pickFiles" ${S.assets ? '' : 'disabled'}>Choose files</button><button class="btn ghost" data-act="toggleNote" ${S.assets ? '' : 'disabled'}>${S.ui.noteOpen ? 'Close note' : 'Write a note'}</button>${S.ui.uploading ? `<span class="pill pen">Uploading ${S.ui.uploading}…</span>` : ''}</div>
     <div class="dim small">PDF, JPG, PNG, WebP, Markdown, text and code files up to 20 MB. You can also paste a screenshot. Save PowerPoint and Word files as PDF first.</div>
@@ -787,7 +789,7 @@ function srcCard(s) {
   const courseMissing = plan && !s.course;
   return `<article class="src">
     <div class="src-head"><span class="ftype mono">${esc(ext)}</span>
-      <div class="src-name"><a href="/_blob/${esc(s.assetId)}" target="_blank" rel="noopener">${esc(s.name)}</a>
+      <div class="src-name"><a href="${esc(blobUrl(s.assetId))}" target="_blank" rel="noopener">${esc(s.name)}</a>
       <div class="dim small">${s.originalName !== s.name ? esc(s.originalName) + ' · ' : ''}${fmtSize(s.sizeBytes || 0)}${s.pages ? ` · ${s.pages} pages` : ''}</div></div>
       <span class="pill ${status[1]}">${status[0]}</span></div>
     ${srcFields(s, !!job)}
@@ -829,7 +831,7 @@ function doneCard(s) {
   const r = s.report || {};
   const links = ids => (ids || []).filter(id => S.concepts.has(id)).map(id => `<a href="#" data-act="go" data-view="concept" data-id="${esc(id)}">${esc(S.concepts.get(id).title)}</a>`).join(', ');
   return `<article class="src"><div class="src-head"><span class="ftype mono">${esc((s.originalName || '').split('.').pop().slice(0, 5))}</span>
-    <div class="src-name"><a href="/_blob/${esc(s.assetId)}" target="_blank" rel="noopener">${esc(s.name)}</a><div class="dim small">${esc(courseName(s.course))}${s.lecture != null ? ` · lecture ${s.lecture}` : ''} · ${s.kind === 'note' ? 'my notes' : 'class material'}${s.processedAt ? ' · ' + new Date(s.processedAt).toLocaleDateString() : ''}</div></div>
+    <div class="src-name"><a href="${esc(blobUrl(s.assetId))}" target="_blank" rel="noopener">${esc(s.name)}</a><div class="dim small">${esc(courseName(s.course))}${s.lecture != null ? ` · lecture ${s.lecture}` : ''} · ${s.kind === 'note' ? 'my notes' : 'class material'}${s.processedAt ? ' · ' + new Date(s.processedAt).toLocaleDateString() : ''}</div></div>
     <span class="pill ok">Arranged</span></div>
     <div class="report">
       <div>${(r.created || []).length} new document${(r.created || []).length === 1 ? '' : 's'} · ${(r.updated || []).length} updated · ${r.cards || 0} new check question${r.cards === 1 ? '' : 's'}</div>
@@ -898,7 +900,7 @@ function lectureSection(l, courseId, keep) {
         <td class="small">${esc(c.oneLine || '')}${c.emphasized ? ' <span class="pill hl">emphasized</span>' : ''}</td><td class="num">${(c.cards || []).length}</td><td><span class="pill ${ms}">${STATUS_LABEL[ms]}</span></td><td>${markPills(c)}</td></tr>`; }).join('')}
     </tbody></table></div>` : ''}
     ${late.length ? `<div class="dim small">${late.map(esc).join(' ')}</div>` : ''}
-    ${!keep && (mats.length || notes.length) ? `<div class="srcs">${mats.length ? 'Materials: ' + mats.map(s => `<a href="/_blob/${esc(s.assetId)}" target="_blank" rel="noopener">${esc(s.name)}</a>`).join(', ') : ''}${mats.length && notes.length ? ' · ' : ''}${notes.length ? 'Notes: ' + notes.map(s => `<a href="/_blob/${esc(s.assetId)}" target="_blank" rel="noopener">${esc(s.name)}</a>`).join(', ') : ''}</div>` : ''}
+    ${!keep && (mats.length || notes.length) ? `<div class="srcs">${mats.length ? 'Materials: ' + mats.map(s => `<a href="${esc(blobUrl(s.assetId))}" target="_blank" rel="noopener">${esc(s.name)}</a>`).join(', ') : ''}${mats.length && notes.length ? ' · ' : ''}${notes.length ? 'Notes: ' + notes.map(s => `<a href="${esc(blobUrl(s.assetId))}" target="_blank" rel="noopener">${esc(s.name)}</a>`).join(', ') : ''}</div>` : ''}
     ${!keep && concepts.length ? `<div class="recall"><strong>Free recall.</strong> ${esc(l.freeRecall || 'Close your notes and write this lecture’s key ideas and how they relate.')}</div>` : ''}
   </section>`;
 }
@@ -979,7 +981,7 @@ function viewConcept(id) {
       <div><h3>Needs first</h3><ul>${prereq.map(x => `<li>${link(x)}</li>`).join('')}${missing.map(x => `<li class="dim">${esc(x)} (no document)</li>`).join('')}${!prereq.length && !missing.length ? '<li class="dim">Nothing</li>' : ''}</ul></div>
       ${usedBy.length ? `<div><h3>Needed by</h3><ul>${usedBy.map(x => `<li>${link(x.id)}</li>`).join('')}</ul></div>` : ''}
       ${related.length ? `<div><h3>Related</h3><ul>${related.map(x => `<li>${link(x)}</li>`).join('')}</ul></div>` : ''}
-      ${srcs.length ? `<div><h3>Sources</h3><ul>${srcs.map(s => `<li><a href="/_blob/${esc(s.assetId)}" target="_blank" rel="noopener">${esc(s.name)}</a></li>`).join('')}</ul></div>` : ''}
+      ${srcs.length ? `<div><h3>Sources</h3><ul>${srcs.map(s => `<li><a href="${esc(blobUrl(s.assetId))}" target="_blank" rel="noopener">${esc(s.name)}</a></li>`).join('')}</ul></div>` : ''}
       ${cards.length ? `<div><h3>Review schedule</h3><ul class="sched">${cards.map(k => { const r = S.reviews.get(cardKey(id, k.n)); return `<li><span class="mono">C${k.n}</span><span class="dim small">${esc(r?.phase || 'initial')} · ${r?.nextDue ? (r.nextDue <= todayStr() ? 'due' : fmtDate(r.nextDue)) : 'due'}</span></li>`; }).join('')}</ul></div>` : ''}
       <div class="sec" style="gap:8px">
         ${S.jobs.get('rewrite:' + id) ? `<div class="job"><div class="job-item"><span class="dot run"></span><span>Rewriting</span><span class="dim small mono">${(S.jobs.get('rewrite:' + id).items?.[0]?.chars || 0) ? S.jobs.get('rewrite:' + id).items[0].chars.toLocaleString() + ' chars' : 'thinking…'}</span></div><button class="btn sm" data-act="stopJob" data-id="rewrite:${esc(id)}">Stop</button></div>`
@@ -1126,6 +1128,7 @@ async function addFiles(fileList, opts = {}) {
 /* ---------- content extraction ---------- */
 async function getBlob(src) {
   if (S.fileCache.has(src.id)) return S.fileCache.get(src.id);
+  if (S.localAssets) { const b = S.localAssets.blobOf(src.assetId); if (!b) throw new Error('The stored file is missing from this browser.'); S.fileCache.set(src.id, b); return b; }
   const res = await fetch('/_blob/' + src.assetId);
   if (!res.ok) throw new Error(`The stored file couldn't be read (${res.status}).`);
   const b = await res.blob(); S.fileCache.set(src.id, b); return b;
@@ -2077,6 +2080,17 @@ const ACT = {
     const ids = uniq(markItems('more', d.course || '').map(it => it.c.id));
     exportPdf({ ids, title: 'Need more understanding', subtitle: `${d.course ? courseName(d.course) : 'All courses'} · ${ids.length} document${ids.length === 1 ? '' : 's'}`, filename: `Need more understanding${d.course ? ' - ' + courseName(d.course) : ''}`, single: false });
   },
+  saveKey() {
+    const k = String(S.ui.keyDraft || $('#apiKeyIn')?.value || '').trim();
+    if (!/^sk-ant-/.test(k)) { toast('That doesn’t look like an Anthropic API key. It starts with sk-ant-.'); return; }
+    try { localStorage.setItem('vault.apiKey', k); S.ui.keyDraft = ''; toast('Key saved in this browser.'); } catch { toast('This browser won’t let the page save the key.'); }
+    render();
+  },
+  removeKey() { try { localStorage.removeItem('vault.apiKey'); } catch {} S.ui.keyDraft = ''; toast('Key removed.'); render(); },
+  backup() { downloadBackup(); },
+  pickRestore() { $('#restoreIn')?.click(); },
+  restoreConfirm() { restoreBackup(); },
+  restoreCancel() { S.ui.pendingRestore = null; render(); },
   pdfCancel() { if (S.pdfBusy) { S.pdfBusy.cancel = true; pdfProgress('Stopping after this page…', false); } },
   marksCourse(d) { S.ui.marksCourse = d.course || ''; render(); },
   quizMarked(d) { const ids = uniq(markItems('more', d.course || '').map(it => it.c.id)); startSession('quiz', shuffle(ids.flatMap(id => (S.concepts.get(id)?.cards || []).map(k => cardKey(id, k.n)))).slice(0, 15)); },
@@ -2144,7 +2158,8 @@ const CHANGE = {
   async openStatus(d, el) { try { await S.db.doc('openItems/' + d.id).update({ status: el.value }); } catch { toast('Couldn’t save.'); } },
   async myNotes(d, el) { try { await S.db.doc('concepts/' + d.id).update({ myNotes: el.value }); toast('Notes saved.'); } catch { toast('Couldn’t save your notes.'); } },
   prereqDraft(d, el) { const set = new Set(S.ui.prereqDraft); el.checked ? set.add(el.value) : set.delete(el.value); S.ui.prereqDraft = [...set]; },
-  natureDraft(d, el) { S.ui.natureDraft = el.value; }
+  natureDraft(d, el) { S.ui.natureDraft = el.value; },
+  restoreFile(d, el) { const f = el.files?.[0]; el.value = ''; if (f) readBackupFile(f); }
 };
 const INPUT = {
   answer(d, el) { if (S.session?.cur) S.session.cur.answer = el.value; },
@@ -2153,7 +2168,8 @@ const INPUT = {
   exam(d, el) { const e = S.ui.examDraft[Number(d.i)]; if (e) e[d.f] = el.value; },
   lecDraft(d, el) { S.ui.lecDraft = el.value; },
   titleDraft(d, el) { S.ui.titleDraft = el.value; },
-  courseNameDraft(d, el) { S.ui.courseNameDraft = el.value; }
+  courseNameDraft(d, el) { S.ui.courseNameDraft = el.value; },
+  apiKey(d, el) { S.ui.keyDraft = el.value; }
 };
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el) return;
@@ -2176,20 +2192,231 @@ document.addEventListener('dragleave', e => { const z = e.target.closest?.('[dat
 document.addEventListener('drop', e => { e.preventDefault(); const z = e.target.closest?.('[data-drop]'); if (z) { z.classList.remove('over'); if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files); } });
 document.addEventListener('paste', e => { if (S.route.view !== 'inbox' || isTyping()) return; const files = [...(e.clipboardData?.files || [])]; if (files.length) { e.preventDefault(); addFiles(files); } });
 
+/* ---------- browser mode (GitHub Pages and any page outside claude.ai) ---------- */
+// Outside claude.ai there is no window.claude, so the four capabilities the app uses are
+// replaced with browser versions that keep the same interface: IndexedDB for documents
+// (db) and files (assets), the Anthropic SDK with the user's own API key (sample), and
+// ordinary browser downloads.
+const isLive = () => S.env === 'live' || S.env === 'local';
+const blobUrl = id => S.localAssets ? S.localAssets.urlOf(id) : '/_blob/' + id;
+const apiKey = () => { try { return localStorage.getItem('vault.apiKey') || ''; } catch { return ''; } };
+let idbConn = null;
+function idbOpen() {
+  return idbConn ||= new Promise((res, rej) => {
+    const r = indexedDB.open('cs-study-vault', 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('docs'); r.result.createObjectStore('assets'); };
+    r.onsuccess = () => res(r.result); r.onerror = () => { idbConn = null; rej(r.error); };
+  });
+}
+async function idbTx(store, mode, fn) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => { const tx = db.transaction(store, mode); const out = fn(tx.objectStore(store)); tx.oncomplete = () => res(out); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
+}
+async function idbAll(store) {
+  const out = new Map();
+  await idbTx(store, 'readonly', os => { os.openCursor().onsuccess = e => { const c = e.target.result; if (c) { out.set(c.key, c.value); c.continue(); } }; });
+  return out;
+}
+const idbPut = (store, key, val) => idbTx(store, 'readwrite', os => { os.put(val, key); });
+const idbDel = (store, key) => idbTx(store, 'readwrite', os => { os.delete(key); });
+const isPlain = v => v && typeof v === 'object' && !Array.isArray(v);
+function deepMerge(target, patch) { for (const [k, v] of Object.entries(patch)) target[k] = isPlain(v) && isPlain(target[k]) ? deepMerge(target[k], v) : v; return target; }
+function makeLocalDb(docs) {
+  const subs = new Set(); let pending = new Set(), timer = null;
+  const parentOf = p => p.slice(0, p.lastIndexOf('/'));
+  const meta = { fromCache: false, hasPendingWrites: false };
+  const snapDoc = path => { const d = docs.get(path); return { id: path.split('/').pop(), exists: !!d, data: () => (d ? clone(d) : undefined), metadata: meta }; };
+  const snapCol = col => { const list = [...docs.keys()].filter(k => parentOf(k) === col).sort().map(snapDoc); return { docs: list, size: list.length, empty: !list.length, docChanges: () => [], metadata: meta }; };
+  const flush = () => { timer = null; const changed = [...pending]; pending = new Set(); for (const s of subs) if (s.doc ? changed.includes(s.path) : changed.some(p => parentOf(p) === s.path)) s.fire(); };
+  const touch = path => { pending.add(path); timer ||= setTimeout(flush, 0); };
+  const fail = e => { throw { code: 'unavailable', message: 'This browser couldn’t save the change: ' + (e?.message || e) }; };
+  const listen = (sub, next) => { sub.fire = () => next(sub.doc ? snapDoc(sub.path) : snapCol(sub.path)); subs.add(sub); setTimeout(() => subs.has(sub) && sub.fire(), 0); return () => subs.delete(sub); };
+  const doc = path => ({
+    id: path.split('/').pop(), path,
+    get: async () => snapDoc(path),
+    async set(data) { const v = clone(data); docs.set(path, v); touch(path); await idbPut('docs', path, v).catch(fail); },
+    async update(data) { if (!docs.has(path)) throw { code: 'invalid_argument', message: 'That document doesn’t exist.' }; const v = deepMerge(clone(docs.get(path)), clone(data)); docs.set(path, v); touch(path); await idbPut('docs', path, v).catch(fail); },
+    async delete() { docs.delete(path); touch(path); await idbDel('docs', path).catch(fail); },
+    onSnapshot: next => listen({ doc: true, path }, next),
+    collection: sub => col(path + '/' + sub)
+  });
+  const col = path => ({
+    path,
+    doc: id => doc(path + '/' + (id || rid())),
+    async add(data) { const r = doc(path + '/' + rid()); await r.set(data); return r; },
+    get: async () => snapCol(path),
+    onSnapshot: next => listen({ doc: false, path }, next)
+  });
+  return { doc, collection: col };
+}
+function makeLocalAssets(blobs) {
+  const urls = new Map();
+  const urlOf = id => { if (!urls.has(id) && blobs.has(id)) urls.set(id, URL.createObjectURL(blobs.get(id))); return urls.get(id) || '#'; };
+  const newId = () => [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+  return {
+    urlOf, blobOf: id => blobs.get(id),
+    async upload(blob, opts = {}) {
+      const type = opts.type || blob.type || 'application/octet-stream';
+      const b = blob.type === type ? blob : new Blob([blob], { type }), id = newId();
+      try { await idbPut('assets', id, b); } catch (e) { throw { code: 'quota_or_state', message: 'This browser is out of storage space for files.' }; }
+      blobs.set(id, b); return { id, url: urlOf(id), sizeBytes: b.size, contentType: type };
+    },
+    async delete(ref) { const had = blobs.delete(ref); if (urls.has(ref)) { URL.revokeObjectURL(urls.get(ref)); urls.delete(ref); } await idbDel('assets', ref).catch(() => {}); return { deleted: had }; },
+    async list() { const assets = [...blobs].map(([id, b]) => ({ id, url: urlOf(id), contentType: b.type, sizeBytes: b.size, createdAt: '' })); return { assets, usage: { files: assets.length, bytes: assets.reduce((a, x) => a + x.sizeBytes, 0), maxFiles: Infinity, maxBytes: Infinity } }; }
+  };
+}
+const localDownloads = {
+  async save({ filename, data }) {
+    const blob = data instanceof Blob ? data : new Blob([data]);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    return { status: 'saved' };
+  }
+};
+// Claude through the official Anthropic SDK, loaded from jsDelivr and called from the browser
+// with the user's own key. Every tier uses Claude Opus 5.5; the tier only sets effort.
+const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@1.8.0/+esm';
+const CLAUDE_MODEL = 'claude-opus-5-5';
+const TIER_EFFORT = { quick: 'low', default: 'medium', complex: 'high' };
+let sdkLoad = null;
+const blobToB64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+async function imageBlock(blob) {
+  // Shrink large photos (phone pictures can be over the API's per-image size) to about 1.2 megapixels.
+  let b = blob;
+  try {
+    const bmp = await createImageBitmap(blob), k = Math.min(1, Math.sqrt(1200000 / (bmp.width * bmp.height)));
+    if (k < 1 || !/^image\/(jpeg|png|webp|gif)$/.test(blob.type)) {
+      const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+      const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
+      b = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.86));
+    }
+  } catch {}
+  return { type: 'image', source: { type: 'base64', media_type: b.type || 'image/jpeg', data: await blobToB64(b) } };
+}
+function parseJsonReply(text) {
+  const tries = [text, (/```(?:json)?\s*([\s\S]*?)```/.exec(text) || [])[1]];
+  const i = text.search(/[{[]/), j = Math.max(text.lastIndexOf('}'), text.lastIndexOf(']'));
+  if (i >= 0 && j > i) tries.push(text.slice(i, j + 1));
+  for (const t of tries) { if (!t) continue; try { return JSON.parse(t); } catch {} }
+  throw { code: 'invalid_json', message: 'Claude’s reply couldn’t be read. Try again.', text };
+}
+function makeLocalSample() {
+  async function run(input, opts = {}) {
+    const key = apiKey();
+    if (!key) throw { code: 'no_key', message: 'Add your Anthropic API key in Settings first.' };
+    if (opts.signal?.aborted) throw { code: 'cancelled', message: 'Stopped.' };
+    const mod = await (sdkLoad ||= import(SDK_URL).catch(e => { sdkLoad = null; throw { code: 'upstream_error', message: 'The Claude library couldn’t be loaded. Check your connection.' }; }));
+    const Anthropic = mod.default;
+    const client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
+    const messages = (typeof input === 'string' ? [{ role: 'user', content: input }] : input).map(t => ({ role: t.role, content: t.content }));
+    const imgs = !opts.images ? [] : opts.images instanceof Blob ? [opts.images] : [...opts.images];
+    if (imgs.length) { const last = messages[messages.length - 1]; last.content = [...(await Promise.all(imgs.map(imageBlock))), { type: 'text', text: last.content }]; }
+    let streamed = '';
+    try {
+      const stream = client.beta.messages.stream({
+        model: CLAUDE_MODEL, max_tokens: 64000,
+        output_config: { effort: TIER_EFFORT[opts.modelTier] || 'medium' },
+        betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+        messages
+      }, { signal: opts.signal });
+      stream.on('text', delta => { streamed += delta; try { opts.onText?.({ text: streamed, delta }); } catch {} });
+      const msg = await stream.finalMessage();
+      if (msg.stop_reason === 'refusal') throw { code: 'refused', message: 'Claude declined this request.' };
+      const text = msg.content.filter(b => b.type === 'text').map(b => b.text).join('');
+      if (!text.trim()) throw { code: 'empty_completion', message: 'Claude returned nothing. Try again.' };
+      return { text, truncated: msg.stop_reason === 'max_tokens', modelTierApplied: opts.modelTier || 'default' };
+    } catch (e) {
+      if (e?.code && !(e instanceof Anthropic.APIError)) throw e;
+      if (e instanceof Anthropic.APIUserAbortError || opts.signal?.aborted) throw { code: 'cancelled', message: 'Stopped.', text: streamed };
+      if (e instanceof Anthropic.AuthenticationError) throw { code: 'no_key', message: 'Anthropic rejected the API key. Check it in Settings.' };
+      if (e instanceof Anthropic.PermissionDeniedError) throw { code: 'not_granted', message: 'This API key isn’t allowed to use Claude Opus 5.5.' };
+      if (e instanceof Anthropic.RateLimitError) throw { code: 'rate_limited', message: 'Too many requests or out of credit on your Anthropic account. Try again shortly.', text: streamed };
+      if (e instanceof Anthropic.BadRequestError) throw { code: 'invalid_request', message: 'Claude rejected the request: ' + (e.message || 'bad request'), text: streamed };
+      if (e instanceof Anthropic.APIConnectionError) throw { code: 'upstream_error', message: 'Couldn’t reach Claude. Check your connection and try again.', text: streamed };
+      throw { code: 'upstream_error', message: 'Claude had a problem: ' + (e?.message || 'unknown error'), text: streamed };
+    }
+  }
+  const sample = (input, opts) => run(input, opts);
+  sample.json = async (input, opts) => { const r = await run(input, opts); if (r.truncated) throw { code: 'invalid_json', message: 'Claude’s reply was cut short. Try again.', text: r.text }; return parseJsonReply(r.text); };
+  sample.limits = async () => S.limits;
+  return sample;
+}
+
+/* ---------- backup & restore ---------- */
+const BACKUP_COLLECTIONS = ['sources', 'concepts', 'lectures', 'reviews', 'openItems', 'worklog', 'marks'];
+function backupCollections() {
+  const rows = { sources: S.sources, concepts: [...S.concepts.values()], lectures: [...S.lectures.values()], reviews: [...S.reviews.values()], openItems: S.openItems, worklog: S.worklog, marks: [...S.marks.values()] };
+  const out = { config: S.config ? [{ id: 'main', data: S.config }] : [] };
+  for (const c of BACKUP_COLLECTIONS) out[c] = (rows[c] || []).map(({ id, ...data }) => ({ id, data }));
+  return out;
+}
+async function downloadBackup() {
+  if (!S.downloads) { toast('Saving files isn’t available here.'); return; }
+  if (S.ui.backingUp) return;
+  S.ui.backingUp = true; render();
+  try {
+    const parts = [`{"format":"cs-study-vault-backup","version":1,"createdAt":${JSON.stringify(new Date().toISOString())},"collections":${JSON.stringify(backupCollections())},"assets":[`];
+    let first = true, missing = 0;
+    for (const s of S.sources) {
+      if (!s.assetId) continue;
+      try { const b = await getBlob(s); parts.push((first ? '' : ',') + JSON.stringify({ id: s.assetId, type: b.type || s.contentType || 'application/octet-stream', data: await blobToB64(b) })); first = false; }
+      catch { missing++; }
+    }
+    parts.push(']}');
+    await S.downloads.save({ filename: `cs-study-vault-backup-${todayStr()}.json`, data: new Blob(parts, { type: 'application/json' }) });
+    toast(missing ? `Backup saved. ${missing} file${missing === 1 ? '' : 's'} couldn’t be read and were left out.` : 'Backup saved.');
+  } catch (e) { toast(e?.code === 'declined' ? 'Backup cancelled.' : 'The backup couldn’t be made: ' + (e?.message || e?.code || 'unknown error')); }
+  finally { S.ui.backingUp = false; render(); }
+}
+async function readBackupFile(file) {
+  try {
+    const b = JSON.parse(await file.text());
+    if (b?.format !== 'cs-study-vault-backup' || !b.collections) throw new Error('This isn’t a CS Study Vault backup file.');
+    S.ui.pendingRestore = { backup: b, name: file.name, docs: (b.collections.concepts || []).length, files: (b.assets || []).length, date: (b.createdAt || '').slice(0, 10) };
+  } catch (e) { toast(e?.message?.startsWith('This isn') ? e.message : 'That file couldn’t be read as a backup.'); }
+  render();
+}
+async function restoreBackup() {
+  const p = S.ui.pendingRestore; if (!p || S.env !== 'local') return;
+  S.ui.restoring = true; render();
+  try {
+    await idbTx('docs', 'readwrite', os => { os.clear(); });
+    await idbTx('assets', 'readwrite', os => { os.clear(); });
+    const entries = [];
+    for (const [col, rows] of Object.entries(p.backup.collections)) for (const r of rows || []) if (r?.id) entries.push([`${col}/${r.id}`, r.data]);
+    await idbTx('docs', 'readwrite', os => { for (const [k, v] of entries) os.put(v, k); });
+    for (const a of p.backup.assets || []) {
+      const bin = atob(a.data), bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      await idbPut('assets', a.id, new Blob([bytes], { type: a.type }));
+    }
+    toast('Backup restored. Reloading…');
+    setTimeout(() => location.reload(), 600);
+  } catch (e) { S.ui.restoring = false; toast('The restore failed: ' + (e?.message || 'unknown error') + '. Your browser may be out of space.'); render(); }
+}
+function viewSettings() {
+  const local = S.env === 'local', p = S.ui.pendingRestore;
+  return `<header class="page-head"><div class="eyebrow">Settings</div><h1>Where your vault lives</h1>
+    <p class="lede">${local ? 'You’re using the vault outside claude.ai. Everything is saved in this browser on this device only. Clearing your browser data or switching browsers starts an empty vault, so keep a backup.' : 'You’re using the vault on claude.ai. Your notes are stored with this page on claude.ai.'}</p></header>
+  ${local ? `<section class="panel sec"><h2>Claude API key</h2>
+    <p class="lede small">Arranging notes, rewrites and grading call Claude with your own key from <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. Usage is billed to that Anthropic account, separately from a Claude subscription. The key stays in this browser and is sent only to Anthropic. Every request uses Claude Opus 5.5; grading short answers runs at low effort to keep it quick and cheap.</p>
+    <div class="row"><input type="password" id="apiKeyIn" autocomplete="off" spellcheck="false" placeholder="${apiKey() ? 'Key saved. Paste a new one to replace it' : 'sk-ant-…'}" value="${esc(S.ui.keyDraft || '')}" data-input="apiKey" data-enter="saveKey" style="flex:1 1 300px;max-width:460px" aria-label="Anthropic API key">
+      <button class="btn primary" data-act="saveKey">Save key</button>${apiKey() ? '<button class="btn ghost danger" data-act="removeKey">Remove key</button>' : ''}</div>
+    <div class="dim small">${apiKey() ? 'A key is saved in this browser.' : 'No key saved yet.'}</div></section>` : ''}
+  <section class="panel sec"><h2>Backup</h2>
+    <p class="lede small">A backup is one .json file with your courses, documents, review history, marks and uploaded files. ${local ? 'Restore it here, or on another browser.' : 'Use it to move your vault to the GitHub Pages version: download it here, then open the GitHub site and restore it under Settings.'}</p>
+    <div class="row"><button class="btn" data-act="backup" ${S.ui.backingUp ? 'disabled' : ''}>${S.ui.backingUp ? 'Making the backup…' : 'Download backup'}</button>
+      ${local ? `<button class="btn" data-act="pickRestore" ${S.ui.restoring ? 'disabled' : ''}>Restore from a backup…</button><input type="file" id="restoreIn" accept=".json,application/json" hidden data-change="restoreFile">` : ''}</div>
+    ${local && p ? `<div class="confirm" style="background:var(--warn-soft)"><span>Replace everything in this browser’s vault with <strong>${esc(p.name)}</strong>${p.date ? ` from ${esc(p.date)}` : ''}: ${p.docs} documents and ${p.files} files? What’s here now will be gone.</span><button class="btn sm primary" data-act="restoreConfirm" ${S.ui.restoring ? 'disabled' : ''}>${S.ui.restoring ? 'Restoring…' : 'Replace and restore'}</button><button class="btn sm ghost" data-act="restoreCancel">Cancel</button></div>` : ''}
+  </section>`;
+}
+
 /* ---------- boot ---------- */
 function subscribe(path, isDoc, onData) {
   const ref = isDoc ? S.db.doc(path) : S.db.collection(path);
   ref.onSnapshot(onData, err => { if (err?.code !== 'revoked') toast('Live updates stopped. Reload the page.'); });
 }
-async function boot() {
-  render();
-  const c = window.claude;
-  if (!c?.use) { S.env = 'offline'; S.configLoaded = true; render(); return; }
-  const [db, assets, sample, downloads] = await Promise.all(['db', 'assets', 'sample', 'downloads'].map(n => c.use(n).catch(() => null)));
-  Object.assign(S, { db, assets, sample, downloads });
-  if (sample) S.limits = await sample.limits().catch(() => null);
-  if (!db) { S.env = 'offline'; render(); return; }
-  S.env = 'live';
+function subscribeAll() {
   const docsOf = q => q.docs.map(d => ({ ...d.data(), id: d.id }));
   subscribe('config/main', true, s => { S.config = s.exists ? s.data() : null; S.configLoaded = true; changed(); });
   subscribe('sources', false, q => { S.sources = docsOf(q); changed(); });
@@ -2199,6 +2426,30 @@ async function boot() {
   subscribe('openItems', false, q => { S.openItems = docsOf(q); changed(); });
   subscribe('worklog', false, q => { S.worklog = docsOf(q); changed(); });
   subscribe('marks', false, q => { S.marks = new Map(docsOf(q).map(x => [x.id, x])); changed(); });
+}
+async function bootLocal() {
+  try {
+    const [docs, blobs] = await Promise.all([idbAll('docs'), idbAll('assets')]);
+    S.localAssets = makeLocalAssets(blobs);
+    Object.assign(S, { db: makeLocalDb(docs), assets: S.localAssets, sample: makeLocalSample(), downloads: localDownloads, limits: { maxPromptBytes: 65536, images: { maxCount: 8, maxInputBytes: 20 * 1048576, mediaTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] } } });
+    S.env = 'local';
+  } catch {
+    S.env = 'offline'; S.configLoaded = true; render();
+    toast('This browser blocks local storage, so the vault can’t save anything here.');
+    return;
+  }
+  subscribeAll(); render();
+}
+async function boot() {
+  render();
+  const c = window.claude;
+  if (!c?.use) { await bootLocal(); return; }
+  const [db, assets, sample, downloads] = await Promise.all(['db', 'assets', 'sample', 'downloads'].map(n => c.use(n).catch(() => null)));
+  Object.assign(S, { db, assets, sample, downloads });
+  if (sample) S.limits = await sample.limits().catch(() => null);
+  if (!db) { S.env = 'offline'; render(); return; }
+  S.env = 'live';
+  subscribeAll();
   render();
 }
 boot();
